@@ -2,20 +2,13 @@ package com.example.petmonitor;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
-import android.content.DialogInterface;
-import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
-import android.os.Build;
 import android.os.Bundle;
-import android.provider.Settings;
 import android.widget.Button;
 import android.widget.Toast;
 
-import androidx.appcompat.app.AlertDialog;
-import androidx.core.app.ActivityCompat;
 import androidx.fragment.app.FragmentActivity;
 
 import com.google.android.gms.maps.CameraUpdateFactory;
@@ -52,15 +45,17 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_maps);
-        // Obtain the SupportMapFragment and get notified when the map is ready to be used.
-        SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
-                .findFragmentById(R.id.map);
+        // Obten o SupportMapFragment notifica quando o mapa está pronto para uso.
+        SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
 
         btnDistancia = findViewById(R.id.btnDistance);
-        //startGettingLocations();
+
+        //cria referência para a base "localization" no firebase
         mDataBase = FirebaseDatabase.getInstance().getReference().child("localization");
 
+        //cria um listner para alterar a posição do marcador e recalcular a distancia, sempre que a posição for alterada
+        //no firebase, pela movimentação do pet no app DogWalk
         mDataBase.addValueEventListener(new ValueEventListener() {
             @Override
             public void onDataChange(DataSnapshot dataSnapshot) {
@@ -72,7 +67,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                         pet = new LatLng(loc.getLatitude(), loc.getLongitude());
                         criaMarcador();
                         if(dono!=null) {
-                            calculaDistancia();
+                            setaDistancia();
                         }
                     }
                 }
@@ -84,26 +79,18 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         });
     }
 
-
-    /**
-     * Manipulates the map once available.
-     * This callback is triggered when the map is ready to be used.
-     * This is where we can add markers or lines, add listeners or move the camera. In this case,
-     * we just add a marker near Sydney, Australia.
-     * If Google Play services is not installed on the device, the user will be prompted to install
-     * it inside the SupportMapFragment. This method will only be triggered once the user has
-     * installed Google Play services and returned to the app.
-     */
     @SuppressLint("MissingPermission")
     @Override
+    //método sobreescrito da classe OnMapReadyCallback
     public void onMapReady(GoogleMap googleMap) {
         mMap = googleMap;
 
         LocationManager locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
 
-        long tempo = 1000; //5 minutos
-        float minDistancia = 1; // 30 metros
+        long tempo = 1000; //1 segundo
+        float minDistancia = 1; // metros
 
+        // de 1 em 1 segundo ou a cada 1 metro movimentado, o marcador do dono e a distancia são alterados
         locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER , tempo , minDistancia,  new LocationListener() {
 
             @Override
@@ -122,26 +109,24 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             }
 
             @Override
+            //quando for detectado movimento do dono esse método é disparado
             public void onLocationChanged(Location location) {
-
+                //se o marcador já existir ele é deletado, para não existir mais de um no mapa
                 if (currentLocationMarker2 != null) {
                     currentLocationMarker2.remove();
                 }
 
                 dono = new LatLng(location.getLatitude(), location.getLongitude());
 
-                calculaDistancia();
+                setaDistancia();
 
                 CameraPosition cameraPosition = new CameraPosition.Builder().zoom(15).target(pet).build();
-
                 currentLocationMarker2 = mMap.addMarker(new MarkerOptions().position(dono).title("Sua posição"));
-
                 mMap.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition));
-
-                //Toast.makeText(getApplicationContext(), "Distancia de "+distancia+" metros", Toast.LENGTH_LONG).show();
             }
         }, null );
 
+        //seta a posição do pet quando o mapa terminar de carregar
         setPetPosition();
     }
 
@@ -169,7 +154,9 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
     }
 
+    //cria marcador no mapa, referente ao pet
     private void criaMarcador() {
+        //se o marcador já existir ele é deletado, para não existir mais de um no mapa
         if (currentLocationMarker != null) {
             currentLocationMarker.remove();
         }
@@ -182,12 +169,13 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
         currentLocationMarker = mMap.addMarker(markerOptions);
 
+        //executa uma animação de zoom de 15 na posição do marcador
         CameraPosition cameraPosition = new CameraPosition.Builder().zoom(15).target(currentLocationLatLng).build();
-
         mMap.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition));
     }
 
-    public static double distance(Double lat1, double lat2,  double lon1, double lon2){
+    //calcula e retorna a distância do marcador do pet atá o marcador do dono
+    public static double calculaDistancia(Double lat1, double lat2, double lon1, double lon2){
         double dLat = Math.toRadians(lat2-lat1);
         double dLon = Math.toRadians(lon2-lon1);
         double a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2);
@@ -195,9 +183,10 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         return 6366000 * c;
     }
 
-    public void calculaDistancia(){
+    //mostra a distancia calculada na tela
+    public void setaDistancia(){
 
-        int aux = (int) distance(dono.latitude, pet.latitude, dono.longitude, pet.longitude);
+        int aux = (int) calculaDistancia(dono.latitude, pet.latitude, dono.longitude, pet.longitude);
 
         if(aux != distancia){
             distancia = aux;

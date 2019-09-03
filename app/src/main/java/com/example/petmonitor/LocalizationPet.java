@@ -2,6 +2,8 @@ package com.example.petmonitor;
 
 import com.google.firebase.database.IgnoreExtraProperties;
 
+//Classe que retrata os campos da base "localization" do firebase
+
 @IgnoreExtraProperties
 public class LocalizationPet {
     private double latitude;
